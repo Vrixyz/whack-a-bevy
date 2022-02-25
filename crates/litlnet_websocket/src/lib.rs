@@ -63,6 +63,7 @@ impl Communication for WebsocketClient {
             Ok(Message::Binary(msg)) => {
                 let de = Deserializer::from_slice(msg.as_slice());
 
+                // FIXME: a stream deserializer is useful for TCP as we can get multiple messages in the same packet, but websocket handles that so we can just deserialize 1 message.
                 let stream = de.into_iter::<T>();
                 let mut res = vec![];
                 for v in stream {

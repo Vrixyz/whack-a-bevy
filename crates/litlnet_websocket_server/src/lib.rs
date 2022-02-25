@@ -36,12 +36,13 @@ impl Server for ComServer {
         for stream in self.listener.incoming() {
             match stream {
                 Ok(stream) => {
-                    let client = Client {
-                        com: litlnet_websocket::WebsocketClient::from_stream(stream)
-                            .expect("failed to create client"),
-                    };
-                    self.clients.insert(self.next_available_id, client);
-                    self.next_available_id.0 = self.next_available_id.0.wrapping_add(1);
+                    if let Ok(com) = litlnet_websocket::WebsocketClient::from_stream(stream) {
+                        let client = Client { com };
+                        self.clients.insert(self.next_available_id, client);
+                        self.next_available_id.0 = self.next_available_id.0.wrapping_add(1);
+                    } else {
+                        println!("Failed to create client");
+                    }
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     break;

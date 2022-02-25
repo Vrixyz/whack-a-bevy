@@ -8,6 +8,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+litlnet_trait = { path = "../litlnet_trait"}
 example_shared = { path = "../example_shared"}
 bevy = "*"
 wasm-bindgen = "0.2.79"
