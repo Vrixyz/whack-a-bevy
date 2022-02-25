@@ -21,6 +21,8 @@ This library is an attempt to :
 
 - support browser: see ./crates/example_client_web/Readme.md
 
+# Getting started
+
 ```mermaid
 graph TD
     A{Type of project} -->|protocol implementation| B[Trait] 

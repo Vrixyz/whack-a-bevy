@@ -1303,7 +1303,9 @@ dependencies = [
  "bevy",
  "example_shared",
  "js-sys",
+ "litlnet_client_bevy",
  "litlnet_trait",
+ "litlnet_websocket_web",
  "serde",
  "serde_json",
  "wasm-bindgen",
@@ -1964,6 +1966,18 @@ dependencies = [
  "rmp-serde",
  "serde",
  "tungstenite",
+]
+
+[[package]]
+name = "litlnet_websocket_web"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "litlnet_trait",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
