@@ -1,10 +1,13 @@
-# Given that:
+# Goals
 
-- Making multiplayer games is hard: tcp, udp, websocket, connection, errors, reconnection, latency...
+Making multiplayer games should be as easy as:
+- "connect"
+- "send data"
+- "receive data"
 
-# Then this library
-
-- Helps you set up a multiplayer game where you want to "send data", and "receive data".
+This library is an attempt to :
+- Hide low level stuff
+- Be modular enough to support multiple protocols or platforms
 
 ## Modularity
 
@@ -17,3 +20,18 @@
 # (very) WIP
 
 - support browser: see ./crates/example_client_web/Readme.md
+
+```mermaid
+graph TD
+    A{Type of project} -->|protocol implementation| B[Trait] 
+    A -->|uses bevy| G[import bevy_'server or client'] 
+    A -->|not bevy| I[import bevy_server]
+    G --> I{server or client?}
+    I --> |server|JJ["Import server_'protocol' spcification"]
+    I --> |client|KK["Import base trait implementation"]
+    JJ --> II
+    KK --> II
+    II{which protocol ?} --> J["Import tcp"]
+    II --> K["Import websocket"]
+    II --> L["Import websocket_web"]
+```
