@@ -21,7 +21,7 @@ extern "C" {
 pub struct MainCamera;
 
 #[derive(Component)]
-struct VisualPlayer {
+struct VisualMole {
     id: usize,
 }
 
@@ -72,10 +72,10 @@ fn send_messages(
 ) {
     if buttons.just_pressed(MouseButton::Left) {
         if let Ok(world_position) = cheatbook::cursor_to_world(&wnds, q_camera.single()) {
-            send.push(ClientMessage::Position(example_shared::Vec2 {
-                x: world_position.x,
-                y: world_position.y,
-            }));
+            send.push(ClientMessage::HitPosition(Vec2::new(
+                world_position.x,
+                world_position.y,
+            )));
         }
     }
 }
@@ -83,31 +83,34 @@ fn receive_messages(
     mut commands: Commands,
     sprites: Res<AssetsVisualPlayer>,
     mut recv: ResMut<MessagesToRead<ServerMessage>>,
-    mut units: Query<(&mut Transform, &VisualPlayer)>,
+    mut moles: Query<(Entity, &Transform, &VisualMole)>,
 ) {
-    while let Some(ServerMessage::Spawn(message)) = recv.pop() {
-        let mut unit_found_and_moved = false;
-        for (mut t, v) in units.iter_mut() {
-            if v.id == message.client_id {
-                t.translation = Vec3::new(message.position.x, message.position.y, 0f32);
-                unit_found_and_moved = true;
-                break;
-            }
-        }
-        if !unit_found_and_moved {
-            commands.spawn().insert_bundle(SpriteBundle {
-                texture: sprites.sprite_handles[0].clone(),
-                transform: Transform::from_translation(Vec3::new(
-                    message.position.x,
-                    message.position.y,
-                    0f32,
-                )),
-                sprite: Sprite {
-                    custom_size: Some(Vec2::splat(64.0)),
+    while let Some(message) = recv.pop() {
+        match message {
+            ServerMessage::Spawn(spawn) => {
+                dbg!("new mole: {spawn}");
+                commands.spawn().insert_bundle(SpriteBundle {
+                    texture: sprites.sprite_handles[0].clone(),
+                    transform: Transform::from_translation(spawn.def.position.extend(0f32)),
+                    sprite: Sprite {
+                        custom_size: Some(Vec2::splat(64.0)),
+                        ..Default::default()
+                    },
                     ..Default::default()
-                },
-                ..Default::default()
-            });
+                });
+            }
+            ServerMessage::DeadMole(dead_id) => {
+                for (e, t, v) in moles.iter() {
+                    if v.id == dead_id {
+                        dbg!("dead mole: {dead_id} ");
+                        commands.entity(e).despawn();
+                        break;
+                    }
+                }
+            }
+            ServerMessage::EscapedMole(_) => {
+                todo!();
+            }
         }
     }
 }

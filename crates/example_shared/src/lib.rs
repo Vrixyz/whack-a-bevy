@@ -20,13 +20,13 @@ pub struct MoleDef {
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub struct SpawnMole {
-    pub id: u32,
+    pub id: usize,
     pub def: MoleDef,
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub enum ServerMessage {
     Spawn(SpawnMole),
-    DeadMole(u32),
-    EscapedMole(u32),
+    DeadMole(usize),
+    EscapedMole(usize),
 }
