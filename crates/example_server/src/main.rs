@@ -8,6 +8,7 @@ use rand::thread_rng;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use std::env;
 
 fn main() {
     App::new().add_plugin(GamePlugin).run();
@@ -35,6 +36,10 @@ pub struct RandomDeterministic {
     pub random: ChaCha20Rng,
     pub seed: u64,
 }
+
+pub struct ConnectionTarget {
+    url: String,
+}
 impl Default for RandomDeterministic {
     fn default() -> Self {
         let seed = thread_rng().gen::<u64>();
@@ -58,15 +63,19 @@ impl Plugin for GamePlugin {
         app.insert_resource(SpawnDef {
             spawn_area_radius: Vec2::new(400f32, 200f32),
         });
+        let port = env::var("PORT").unwrap_or("8083".to_string());
+        app.insert_resource(ConnectionTarget {
+            url: format!("0.0.0.0:{}", port),
+        });
         app.add_system(receive_messages);
         app.add_system(spawn_moles);
         app.add_system(reconnect);
     }
 }
 
-fn reconnect(mut com: ResMut<Option<ComServer>>) {
+fn reconnect(connection: Res<ConnectionTarget>, mut com: ResMut<Option<ComServer>>) {
     if com.is_none() {
-        if let Ok(new_com) = ComServer::bind("127.0.0.1:8083") {
+        if let Ok(new_com) = ComServer::bind(&connection.url) {
             *com = Some(new_com);
         }
     }
