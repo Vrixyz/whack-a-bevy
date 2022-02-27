@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub enum ClientMessage {
     HitPosition(Vec2),
+    RequestAllExistingMoles,
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
@@ -29,4 +30,5 @@ pub enum ServerMessage {
     Spawn(SpawnMole),
     DeadMole(usize),
     EscapedMole(usize),
+    AllExistingMoles(Vec<SpawnMole>),
 }

@@ -39,11 +39,13 @@ pub fn main() {
 
 pub fn setup(
     mut commands: Commands,
+    mut send: ResMut<MessagesToSend<ClientMessage>>,
     assets: Res<AssetServer>,
     mut client: ResMut<Option<WebsocketClient>>,
 ) {
     if let Ok(ws) = WebsocketClient::connect("ws://127.0.0.1:8083") {
         *client = Some(ws);
+        send.push(ClientMessage::RequestAllExistingMoles);
     }
     commands
         .spawn()
@@ -79,24 +81,13 @@ fn receive_messages(
     while let Some(message) = recv.pop() {
         match message {
             ServerMessage::Spawn(spawn) => {
-                dbg!("new mole: {spawn}");
-                commands
-                    .spawn()
-                    .insert_bundle(SpriteBundle {
-                        texture: sprites.sprite_handles[0].clone(),
-                        transform: Transform::from_translation(spawn.def.position.extend(0f32)),
-                        sprite: Sprite {
-                            custom_size: Some(Vec2::splat(64.0)),
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    })
-                    .insert(VisualMole { id: spawn.id });
+                spawn_mole(&mut commands, &sprites, spawn);
             }
             ServerMessage::DeadMole(dead_id) => {
+                dbg!("?dead mole: {}", dead_id);
                 for (e, t, v) in moles.iter() {
                     if v.id == dead_id {
-                        dbg!("dead mole: {dead_id} ");
+                        dbg!("dead mole.");
                         commands.entity(e).despawn();
                         break;
                     }
@@ -105,6 +96,31 @@ fn receive_messages(
             ServerMessage::EscapedMole(_) => {
                 todo!();
             }
+            ServerMessage::AllExistingMoles(moles) => {
+                for m in moles {
+                    spawn_mole(&mut commands, &sprites, m);
+                }
+            }
         }
     }
+}
+
+fn spawn_mole(
+    commands: &mut Commands,
+    sprites: &Res<AssetsVisualPlayer>,
+    spawn: example_shared::SpawnMole,
+) {
+    dbg!("new mole: {spawn}");
+    commands
+        .spawn()
+        .insert_bundle(SpriteBundle {
+            texture: sprites.sprite_handles[0].clone(),
+            transform: Transform::from_translation(spawn.def.position.extend(0f32)),
+            sprite: Sprite {
+                custom_size: Some(Vec2::splat(64.0)),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .insert(VisualMole { id: spawn.id });
 }

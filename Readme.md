@@ -20,4 +20,5 @@
 
 # Theme interpretation
 
-- 
+- Players playing for a longer time than others have the unfair advantage that they had more chances to whack some bevies!
+- Players with better connection have an unfair advantage

@@ -1,11 +1,12 @@
 use bevy::{prelude::*, utils::HashMap};
 use example_shared::{ClientMessage, MoleDef, MoleKind, ServerMessage, SpawnMole};
 use litlnet_server_bevy::{MessagesToRead, MessagesToSend, ServerPlugin};
+use litlnet_trait::ClientId;
 use litlnet_trait::Server;
 use litlnet_websocket_server::ComServer;
-use rand::SeedableRng;
 use rand::thread_rng;
 use rand::Rng;
+use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
 fn main() {
@@ -79,20 +80,38 @@ fn receive_messages(
 ) {
     if let Some(com_server) = com_server.as_ref() {
         while let Some((from_client_id, message)) = recv.pop() {
-            let ClientMessage::HitPosition(position) = message;
-            // Check for mole
-            let mut mole_to_die = None;
-            for (id, def) in &moles.moles {
-                if def.position.distance(position) < 50f32 {
-                    mole_to_die = Some(*id);
+            match message {
+                ClientMessage::HitPosition(position) => {
+                    dbg!("HitPosition: ", position);
+                    // Check for mole
+                    let mut mole_to_die = None;
+                    for (id, def) in &moles.moles {
+                        if def.position.distance(position) < 50f32 {
+                            mole_to_die = Some(*id);
+                        }
+                    }
+                    if let Some(mole_to_die) = mole_to_die {
+                        dbg!("dead mole: {}", mole_to_die);
+                        moles.moles.remove(&mole_to_die);
+                        let message = ServerMessage::DeadMole(mole_to_die);
+                        for send_client_id in com_server.iter() {
+                            send.push((*send_client_id, message.clone()));
+                        }
+                    }
                 }
-            }
-            if let Some(mole_to_die) = mole_to_die {
-                dbg!("dead mole: {mole_to_die} ");
-                moles.moles.remove(&mole_to_die);
-                let message = ServerMessage::DeadMole(mole_to_die);
-                for send_client_id in com_server.iter() {
-                    send.push((*send_client_id, message.clone()));
+                ClientMessage::RequestAllExistingMoles => {
+                    dbg!("RequestAllExistingMoles");
+                    let message = ServerMessage::AllExistingMoles(
+                        moles
+                            .moles
+                            .iter()
+                            .map(|(id, def)| SpawnMole {
+                                id: *id,
+                                def: def.clone(),
+                            })
+                            .collect(),
+                    );
+                    send.push((from_client_id, message.clone()));
                 }
             }
         }
