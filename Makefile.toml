@@ -12,5 +12,5 @@ workspace = false
 dependencies = ["example-web"]
 env = { CARGO_MAKE_SCRIPT_FORCE_PIPE_STDIN = true }
 script = '''
-cd crates/example_client_web && static-web-server.exe --port 8787 --root public
+cd crates/example_client_web/public && basic-http-server
 '''

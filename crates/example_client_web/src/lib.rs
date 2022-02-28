@@ -1,5 +1,7 @@
 mod cheatbook;
 
+use std::env;
+
 use bevy::prelude::*;
 
 use example_shared::{ClientMessage, ServerMessage};
@@ -52,7 +54,7 @@ pub fn setup(
     assets: Res<AssetServer>,
     mut client: ResMut<Option<WebsocketClient>>,
 ) {
-    if let Ok(ws) = WebsocketClient::connect("ws://127.0.0.1:8083") {
+    if let Ok(ws) = WebsocketClient::connect(env!("WAB_SERVER_URL", "ws://127.0.0.1:8083")) {
         *client = Some(ws);
         send.push(ClientMessage::RequestAllExistingMoles);
     }
