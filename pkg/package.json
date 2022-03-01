@@ -1,0 +1,15 @@
+{
+  "name": "example_client_web",
+  "collaborators": [
+    "Thierry Berger <contact@thierryberger.com>"
+  ],
+  "version": "0.1.0",
+  "files": [
+    "example_client_web_bg.wasm",
+    "example_client_web.js",
+    "example_client_web.d.ts"
+  ],
+  "module": "example_client_web.js",
+  "types": "example_client_web.d.ts",
+  "sideEffects": false
+}
