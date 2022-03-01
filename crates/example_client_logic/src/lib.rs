@@ -97,7 +97,7 @@ fn receive_messages(
                 }
             }
             ServerMessage::EscapedMole(_) => {
-                todo!();
+                todo!("escaped mole");
             }
             ServerMessage::AllExistingMoles(moles) => {
                 for m in moles {

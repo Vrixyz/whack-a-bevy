@@ -82,7 +82,7 @@ impl Server for ComServer {
                     self.to_be_removed.push(*client_id);
                 }
             },
-            None => todo!(),
+            None => {}
         }
     }
 }

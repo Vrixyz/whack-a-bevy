@@ -40,7 +40,7 @@ impl WebsocketClient {
                 }
             }
         }
-        todo!()
+        todo!("connect failure")
     }
 }
 
@@ -60,7 +60,7 @@ impl Communication for WebsocketClient {
                 recv.clear();
                 return Ok(Some(res));
             }
-            Err(_) => todo!(),
+            Err(e) => todo!("receive failure{}", e),
         }
     }
 
@@ -84,11 +84,11 @@ impl Communication for WebsocketClient {
                     }
                 }
                 None => {
-                    todo!()
+                    todo!("no socket at this point ?")
                 }
             },
             Err(_) => {
-                todo!()
+                todo!("cannot lock websocket global")
             }
         }
         Ok(())
@@ -108,7 +108,7 @@ fn start_websocket(remote_addr: &str) -> Result<WebSocket, JsValue> {
             let array = js_sys::Uint8Array::new(&abuf);
             match global_recv_packets().lock() {
                 Ok(mut recv) => recv.push(array.to_vec()),
-                Err(_) => todo!(),
+                Err(e) => todo!("cannot lock recv global ?"),
             }
         } else {
             dbg!("message event, received Unknown: {:?}", e.data());
