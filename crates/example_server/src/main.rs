@@ -137,10 +137,9 @@ fn spawn_moles(
     mut send: ResMut<MessagesToSend<ServerMessage>>,
 ) {
     timer.timer.tick(time.delta());
-    if !timer.timer.finished() {
+    if !timer.timer.just_finished() {
         return;
     }
-    timer.timer.reset();
     if let Some(com_server) = com_server.as_ref() {
         let def = MoleDef {
             kind: MoleKind::Duration(2f32),

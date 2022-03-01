@@ -1289,11 +1289,21 @@ name = "example_client"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "example_client_logic",
+]
+
+[[package]]
+name = "example_client_logic"
+version = "0.1.0"
+dependencies = [
+ "bevy",
  "example_shared",
  "litlnet_client_bevy",
+ "litlnet_trait",
  "litlnet_websocket",
- "rmp-serde",
+ "litlnet_websocket_web",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1301,13 +1311,8 @@ name = "example_client_web"
 version = "0.1.0"
 dependencies = [
  "bevy",
- "example_shared",
+ "example_client_logic",
  "js-sys",
- "litlnet_client_bevy",
- "litlnet_trait",
- "litlnet_websocket_web",
- "serde",
- "serde_json",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -2611,9 +2616,9 @@ checksum = "a0d463f2884048e7153449a55166f91028d5b0ea53c79377099ce4e8cf0cf9bb"
 
 [[package]]
 name = "redox_syscall"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
+checksum = "8380fe0152551244f0747b1bf41737e0f8a74f97a14ccefd1148187271634f3c"
 dependencies = [
  "bitflags",
 ]

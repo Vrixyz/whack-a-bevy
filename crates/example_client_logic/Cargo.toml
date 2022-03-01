@@ -1,0 +1,26 @@
+[package]
+name = "example_client_logic"
+version = "0.1.0"
+authors = ["Thierry Berger <contact@thierryberger.com>"]
+edition = "2021"
+
+[lib]
+crate-type = ["lib"]
+
+
+[dependencies]
+litlnet_trait = { path = "../litlnet_trait"}
+example_shared = { path = "../example_shared"}
+bevy = "*"
+serde = { version = "*", features = ["derive"] }
+serde_json = "*"
+litlnet_client_bevy = { path = "../litlnet_client_bevy" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+litlnet_websocket_web = { path = "../litlnet_websocket_web" }
+
+[target.'cfg(windows)'.dependencies]
+litlnet_websocket = { path = "../litlnet_websocket" }
+
+[target.'cfg(unix)'.dependencies]
+litlnet_websocket = { path = "../litlnet_websocket" }
