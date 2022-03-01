@@ -45,6 +45,7 @@ impl WebsocketClient {
         })
     }
     pub fn from_stream(stream: std::net::TcpStream) -> Result<WebsocketClient, std::io::Error> {
+        stream.set_nonblocking(true)?;
         match tungstenite::accept(stream) {
             Ok(websocket) => Ok(Self {
                 websocket: Box::new(websocket),

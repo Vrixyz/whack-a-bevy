@@ -14,3 +14,11 @@ env = { CARGO_MAKE_SCRIPT_FORCE_PIPE_STDIN = true }
 script = '''
 cd crates/example_client_web/public && basic-http-server
 '''
+
+[tasks.deb]
+workspace = false
+script = '''
+mv crates/example_client* .
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-unknown-linux-gnu-gcc cargo build --bin example_server --target x86_64-unknown-linux-gnu 
+mv example_client* crates
+'''

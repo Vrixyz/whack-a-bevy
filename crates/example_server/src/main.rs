@@ -75,6 +75,7 @@ impl Plugin for GamePlugin {
 
 fn reconnect(connection: Res<ConnectionTarget>, mut com: ResMut<Option<ComServer>>) {
     if com.is_none() {
+        dbg!("Reconnection");
         if let Ok(new_com) = ComServer::bind(&connection.url) {
             *com = Some(new_com);
         }
@@ -157,6 +158,7 @@ fn spawn_moles(
             id: mole_ids.next_id,
             def,
         });
+        dbg!("new mole");
         mole_ids.next_id += 1;
         for send_client_id in com_server.iter() {
             send.push((*send_client_id, message.clone()));
