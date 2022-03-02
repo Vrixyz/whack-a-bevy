@@ -32,15 +32,26 @@ pub struct WebsocketClient {}
 
 impl WebsocketClient {
     pub fn connect(remote_addr: &str) -> Result<Self, std::io::Error> {
-        if let Ok(websocket) = start_websocket(remote_addr) {
-            if let Ok(mut ws) = global_websocket().lock() {
-                if ws.is_none() {
-                    *ws = Some(websocket);
-                    return Ok(Self {});
+        match start_websocket(remote_addr) {
+            Ok(websocket) => {
+                if let Ok(mut ws) = global_websocket().lock() {
+                    if ws.is_none() {
+                        *ws = Some(websocket);
+                        return Ok(Self {});
+                    }
                 }
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionAborted,
+                    format!(
+                        "connect to {} succeeded but then internal failure",
+                        remote_addr
+                    ),
+                ));
+            }
+            err => {
+                todo!("connect failure to {}\nerr: {:?}", remote_addr, err);
             }
         }
-        todo!("connect failure to {}", remote_addr)
     }
 }
 
@@ -60,7 +71,7 @@ impl Communication for WebsocketClient {
                 recv.clear();
                 return Ok(Some(res));
             }
-            Err(e) => todo!("receive failure{}", e),
+            Err(e) => todo!("receive failure {}", e),
         }
     }
 
