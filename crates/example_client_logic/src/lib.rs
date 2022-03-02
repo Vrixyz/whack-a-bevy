@@ -23,22 +23,30 @@ struct AssetsVisualPlayer {
     pub sprite_handles: Vec<Handle<Image>>,
 }
 
+enum WantToRequestExisting {
+    No,
+    Yes(Timer),
+}
+
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(DefaultPlugins);
         app.add_plugin(ClientPlugin::<ComClient, ClientMessage, ServerMessage>::default());
+        app.insert_resource(WantToRequestExisting::No);
         app.add_startup_system(setup);
+        app.add_system(check_request_existing);
         app.add_system(send_messages);
         app.add_system(receive_messages);
     }
 }
 
-pub fn setup(
+fn setup(
     mut commands: Commands,
     mut send: ResMut<MessagesToSend<ClientMessage>>,
     assets: Res<AssetServer>,
+    mut want_request_existing: ResMut<WantToRequestExisting>,
     mut client: ResMut<Option<ComClient>>,
 ) {
     #[cfg(target_arch = "wasm32")]
@@ -48,7 +56,6 @@ pub fn setup(
         &std::env::var("WAB_SERVER_URL").unwrap_or_else(|_| "ws://127.0.0.1:8083".to_string());
     if let Ok(ws) = ComClient::connect(server_url) {
         *client = Some(ws);
-        send.push(ClientMessage::RequestAllExistingMoles);
     }
     commands
         .spawn()
@@ -58,6 +65,24 @@ pub fn setup(
     commands.insert_resource(AssetsVisualPlayer {
         sprite_handles: vec![sprite_handle],
     });
+    *want_request_existing = WantToRequestExisting::Yes(Timer::from_seconds(0.5f32, false))
+}
+fn check_request_existing(
+    time: Res<Time>,
+    mut send: ResMut<MessagesToSend<ClientMessage>>,
+    mut want_request_existing: ResMut<WantToRequestExisting>,
+) {
+    match want_request_existing.as_mut() {
+        WantToRequestExisting::Yes(ref mut timer) => {
+            timer.tick(time.delta());
+            if timer.just_finished() {
+                send.push(ClientMessage::RequestAllExistingMoles);
+                timer.set_duration(std::time::Duration::from_secs_f32(2.5f32));
+                timer.reset();
+            }
+        }
+        _ => (),
+    }
 }
 
 fn send_messages(
@@ -78,12 +103,14 @@ fn send_messages(
 fn receive_messages(
     mut commands: Commands,
     sprites: Res<AssetsVisualPlayer>,
+    mut want_request_existing: ResMut<WantToRequestExisting>,
     mut recv: ResMut<MessagesToRead<ServerMessage>>,
     mut moles: Query<(Entity, &Transform, &VisualMole)>,
 ) {
     while let Some(message) = recv.pop() {
         match message {
             ServerMessage::Spawn(spawn) => {
+                dbg!("new mole: {}", &spawn);
                 spawn_mole(&mut commands, &sprites, spawn);
             }
             ServerMessage::DeadMole(dead_id) => {
@@ -99,10 +126,15 @@ fn receive_messages(
             ServerMessage::EscapedMole(_) => {
                 todo!("escaped mole");
             }
-            ServerMessage::AllExistingMoles(moles) => {
-                for m in moles {
+            ServerMessage::AllExistingMoles(existing_moles) => {
+                for (e, _, _) in moles.iter() {
+                    commands.entity(e).despawn();
+                }
+                dbg!("{} existing moles", existing_moles.len());
+                for m in existing_moles {
                     spawn_mole(&mut commands, &sprites, m);
                 }
+                *want_request_existing = WantToRequestExisting::No;
             }
         }
     }
@@ -113,7 +145,6 @@ fn spawn_mole(
     sprites: &Res<AssetsVisualPlayer>,
     spawn: example_shared::SpawnMole,
 ) {
-    dbg!("new mole: {}", &spawn);
     commands
         .spawn()
         .insert_bundle(SpriteBundle {
