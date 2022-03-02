@@ -40,7 +40,7 @@ impl WebsocketClient {
                 }
             }
         }
-        todo!("connect failure")
+        todo!("connect failure to {}", remote_addr)
     }
 }
 
