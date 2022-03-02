@@ -34,7 +34,8 @@ jobs:
           override: true
       - uses: jetli/wasm-pack-action@v0.3.0
       - run: cargo install --force cargo-make
-      - run: WAB_SERVER_URL="ws://207.154.220.254:8083" cargo make example-web && rm ./crates/example_client_web/public/pkg/.gitignore
+      #- run: WAB_SERVER_URL="ws://207.154.220.254:8083" cargo make example-web && rm ./crates/example_client_web/public/pkg/.gitignore
+      - run: WAB_SERVER_URL="ws://whack-a-bevy.herokuapp.com/" cargo make example-web && rm ./crates/example_client_web/public/pkg/.gitignore
       - uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
