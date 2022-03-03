@@ -48,7 +48,7 @@ pub struct RemotePlayers {
 mod ui {
     use bevy::{prelude::*, reflect::List};
     use bevy_egui::{EguiContext, EguiPlugin};
-    use egui::Vec2;
+    use egui::{Color32, RichText, Vec2};
     use example_shared::ClientMessage;
     use litlnet_client_bevy::MessagesToSend;
 
@@ -74,35 +74,49 @@ mod ui {
         mut send: ResMut<MessagesToSend<ClientMessage>>,
         mut egui_context: ResMut<EguiContext>,
         mut local_player: ResMut<LocalPlayer>,
+        remote_players: Res<RemotePlayers>,
         moles: Query<Entity, With<VisualMole>>,
     ) {
-        egui::Window::new("Hello")
-            .fixed_size(Vec2::new(200f32, 100f32))
+        egui::Window::new("Info")
+            .fixed_size(Vec2::new(150f32, 400f32))
             .anchor(egui::Align2::LEFT_TOP, Vec2::default())
             .show(egui_context.ctx_mut(), |ui| {
                 if (local_player.is_final) {
-                    ui.label(format!("Name: {}", local_player.name));
+                    ui.label(format!("Nickname: {}", local_player.name));
                 } else {
                     ui.text_edit_singleline(&mut local_player.name);
                     local_player.name = local_player.name.chars().take(6).collect::<String>();
-                    if ui.button("send name").clicked() {
+                    let is_send_name_clicked =
+                        if !local_player.is_final && local_player.name != "Newbie" {
+                            ui.button(RichText::new("send nickname").color(Color32::LIGHT_GREEN))
+                                .clicked()
+                        } else {
+                            ui.button("send nickname").clicked()
+                        };
+                    if is_send_name_clicked {
                         dbg!("send name={}", &local_player.name);
                         send.push(ClientMessage::SetName(local_player.name.clone()));
                         local_player.is_final = true;
                     }
                 }
-                ui.label(format!(
-                    "Score: {}",
-                    if let Some(score) = local_player.score {
-                        score.to_string()
-                    } else {
-                        "Not known yet".to_string()
-                    }
-                ));
+                ui.label("");
                 ui.label(format!(
                     "Number of bevies to whack: {}",
                     moles.iter().count()
                 ));
+                ui.label("");
+                ui.label("SCORES:");
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    let mut current_player_found = false;
+                    for (name, score) in &remote_players.players {
+                        if !current_player_found && name == &local_player.name {
+                            ui.colored_label(Color32::LIGHT_GREEN, format!("{}: {}", name, score));
+                            current_player_found = true;
+                        } else {
+                            ui.label(format!("{}: {}", name, score));
+                        }
+                    }
+                });
             });
     }
     fn display_connection(
@@ -161,8 +175,8 @@ impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(WindowDescriptor {
             title: "Whack A Bevy!".to_string(),
-            width: 640.,
-            height: 360.,
+            width: 1080.,
+            height: 640.,
             vsync: true,
             ..Default::default()
         });
@@ -266,6 +280,7 @@ fn receive_messages(
     mut recv: ResMut<MessagesToRead<ServerMessage>>,
     mut moles: Query<(Entity, &Transform, &VisualMole)>,
     mut local_player: ResMut<LocalPlayer>,
+    mut rankings: ResMut<RemotePlayers>,
 ) {
     while let Some(message) = recv.pop() {
         match message {
@@ -301,10 +316,14 @@ fn receive_messages(
                 *want_request_existing = WantToRequestExisting::No;
             }
             ServerMessage::UpdateScores(update) => {
-                dbg!("update scores {}", update);
-                // TODO: update scores
-                // TODO: receive scores
-                // TODO:
+                rankings.players = update
+                    .best_players
+                    .iter()
+                    .map(|v| (v.name.clone(), v.score as u32))
+                    .collect();
+                rankings
+                    .players
+                    .sort_by(|p1, p2| p2.1.partial_cmp(&p1.1).unwrap());
             }
         }
     }

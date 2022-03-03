@@ -73,7 +73,7 @@ impl Plugin for GamePlugin {
         app.insert_resource(PlayersNames::default());
         app.insert_resource(PlayersRanking::default());
         app.insert_resource(SpawnTimer {
-            timer: Timer::from_seconds(0.5f32, true),
+            timer: Timer::from_seconds(2.5f32, true),
         });
         app.insert_resource(ScoreUpdateTimer {
             timer: Timer::from_seconds(2f32, true),
