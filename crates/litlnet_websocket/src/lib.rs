@@ -34,8 +34,15 @@ pub struct WebsocketClient {
 
 impl WebsocketClient {
     pub fn connect(remote_addr: &str) -> Result<WebsocketClient, std::io::Error> {
-        let (mut websocket, _) =
-            tungstenite::connect(url::Url::parse(remote_addr).unwrap()).expect("Can't connect");
+        let (mut websocket, _) = match tungstenite::connect(url::Url::parse(remote_addr).unwrap()) {
+            Ok(it) => it,
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionAborted,
+                    dbg!(err),
+                ))
+            }
+        };
         if let MaybeTlsStream::Plain(s) = websocket.get_mut() {
             s.set_nonblocking(true)?
         }
@@ -98,6 +105,7 @@ impl Communication for WebsocketClient {
         message.serialize(&mut serde_json::Serializer::new(&mut buf))?;
         match self.websocket.write_all(buf) {
             Ok(it) => it,
+            Err(tungstenite::Error::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {}
             Err(e) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::ConnectionAborted,

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum ClientMessage {
     HitPosition(Vec2),
     RequestAllExistingMoles,
+    SetName(String),
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
@@ -26,9 +27,27 @@ pub struct SpawnMole {
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
+pub struct AllExistingMoles {
+    pub moles: Vec<SpawnMole>,
+    pub local_player_id: usize,
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
+pub struct PlayerRank {
+    pub name: String,
+    pub score: usize,
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
+pub struct UpdateScores {
+    pub best_players: Vec<PlayerRank>,
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub enum ServerMessage {
     Spawn(SpawnMole),
     DeadMole(usize),
     EscapedMole(usize),
-    AllExistingMoles(Vec<SpawnMole>),
+    UpdateScores(UpdateScores),
+    AllExistingMoles(AllExistingMoles),
 }

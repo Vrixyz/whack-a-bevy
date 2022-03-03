@@ -77,6 +77,7 @@ impl Server for ComServer {
         match self.clients.get_mut(client_id) {
             Some(client) => match client.com.send::<T>(data) {
                 Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
                 Err(e) => {
                     dbg!(e);
                     self.to_be_removed.push(*client_id);

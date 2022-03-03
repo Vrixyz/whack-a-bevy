@@ -2,7 +2,7 @@ mod cheatbook;
 
 use bevy::prelude::*;
 
-use example_shared::{ClientMessage, ServerMessage};
+use example_shared::{AllExistingMoles, ClientMessage, ServerMessage};
 use litlnet_client_bevy::{ClientPlugin, MessagesToRead, MessagesToSend};
 
 #[cfg(target_arch = "wasm32")]
@@ -28,35 +28,161 @@ enum WantToRequestExisting {
     Yes(Timer),
 }
 
+pub struct ReconnectState {
+    timer: Timer,
+    attempt: usize,
+}
+
+pub struct LocalPlayer {
+    // used to map score (we can have multiple players bringing score to the same rank,
+    // it's ok because I won't dev a full authentication system for a jam yet.)
+    name: String,
+    is_final: bool,
+    // used to know who killed which mole
+    id: Option<usize>,
+    score: Option<u32>,
+}
+pub struct RemotePlayers {
+    players: Vec<(String, u32)>,
+}
+mod ui {
+    use bevy::{prelude::*, reflect::List};
+    use bevy_egui::{EguiContext, EguiPlugin};
+    use egui::Vec2;
+    use example_shared::ClientMessage;
+    use litlnet_client_bevy::MessagesToSend;
+
+    use crate::{ComClient, LocalPlayer, ReconnectState, RemotePlayers, VisualMole};
+    pub struct GameUI;
+
+    impl Plugin for GameUI {
+        fn build(&self, app: &mut App) {
+            app.add_plugin(EguiPlugin);
+            app.insert_resource(LocalPlayer {
+                name: "Newbie".to_string(),
+                is_final: false,
+                id: None,
+                score: None,
+            });
+            app.insert_resource(RemotePlayers { players: vec![] });
+            app.add_system(show_name);
+            app.add_system(display_connection);
+        }
+    }
+
+    fn show_name(
+        mut send: ResMut<MessagesToSend<ClientMessage>>,
+        mut egui_context: ResMut<EguiContext>,
+        mut local_player: ResMut<LocalPlayer>,
+        moles: Query<Entity, With<VisualMole>>,
+    ) {
+        egui::Window::new("Hello")
+            .fixed_size(Vec2::new(200f32, 100f32))
+            .anchor(egui::Align2::LEFT_TOP, Vec2::default())
+            .show(egui_context.ctx_mut(), |ui| {
+                if (local_player.is_final) {
+                    ui.label(format!("Name: {}", local_player.name));
+                } else {
+                    ui.text_edit_singleline(&mut local_player.name);
+                    local_player.name = local_player.name.chars().take(6).collect::<String>();
+                    if ui.button("send name").clicked() {
+                        dbg!("send name={}", &local_player.name);
+                        send.push(ClientMessage::SetName(local_player.name.clone()));
+                        local_player.is_final = true;
+                    }
+                }
+                ui.label(format!(
+                    "Score: {}",
+                    if let Some(score) = local_player.score {
+                        score.to_string()
+                    } else {
+                        "Not known yet".to_string()
+                    }
+                ));
+                ui.label(format!(
+                    "Number of bevies to whack: {}",
+                    moles.iter().count()
+                ));
+            });
+    }
+    fn display_connection(
+        mut egui_context: ResMut<EguiContext>,
+        client: Res<Option<ComClient>>,
+        reconnect_state: Res<ReconnectState>,
+    ) {
+        if client.is_some() {
+            return;
+        }
+        egui::Window::new("Connection to server...")
+            .anchor(egui::Align2::CENTER_CENTER, Vec2::default())
+            .show(egui_context.ctx_mut(), |ui| {
+                ui.label(format!(
+                    "retrying in {} seconds",
+                    (reconnect_state.timer.duration().as_secs_f32()
+                        - reconnect_state.timer.elapsed_secs()) as i32
+                ));
+                match reconnect_state.attempt {
+                    0 => {}
+                    1..=2 => {
+                        ui.label("Connecting to server...");
+                    },
+                    3..=4 => {
+                        ui.label("Server restarts after 30 minutes of inactivity, so chances are you're the first one to connect! Hang thight.");
+                    },
+                    5..=6 => {
+                        ui.label("I'm using Heroku Free, that's why there's the restart...");
+                    },
+                    7 => {
+                        ui.label("As the first player, you'll have the UNFAIR ADVANTAGE to be able to hit more bevies!");
+                    },
+                    8 => {
+                        ui.label("If you feel like you're addicted to video games, you might want to seek help from professionnals.");
+                    },
+                    9 => {
+                        ui.label("Ok it's definitely taking more time than necessary, please tell me :).");
+                    },
+                    10 => {
+                        ui.label("do you think there's more messages..?");
+                    }
+                    11.. => {
+                        ui.label("Alright there was one other message, thanks for really giving this a try, now please drop me a message and try at another time <3");
+                    }
+                    _ => {
+                        ui.label("unexpected attempt value, how much time have you waited ? :o");
+                    }
+                }
+            });
+    }
+}
+
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        app.insert_resource(WindowDescriptor {
+            title: "Whack A Bevy!".to_string(),
+            width: 640.,
+            height: 360.,
+            vsync: true,
+            ..Default::default()
+        });
         app.add_plugins(DefaultPlugins);
         app.add_plugin(ClientPlugin::<ComClient, ClientMessage, ServerMessage>::default());
+        app.add_plugin(ui::GameUI);
         app.insert_resource(WantToRequestExisting::No);
+        app.insert_resource(ReconnectState {
+            timer: Timer::from_seconds(0.01f32, true),
+            attempt: 0,
+        });
         app.add_startup_system(setup);
+        app.add_system(reconnect);
         app.add_system(check_request_existing);
         app.add_system(send_messages);
         app.add_system(receive_messages);
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut send: ResMut<MessagesToSend<ClientMessage>>,
-    assets: Res<AssetServer>,
-    mut want_request_existing: ResMut<WantToRequestExisting>,
-    mut client: ResMut<Option<ComClient>>,
-) {
-    #[cfg(target_arch = "wasm32")]
-    let server_url = option_env!("WAB_SERVER_URL").unwrap_or("ws://127.0.0.1:8083");
-    #[cfg(not(target_arch = "wasm32"))]
-    let server_url =
-        &std::env::var("WAB_SERVER_URL").unwrap_or_else(|_| "ws://127.0.0.1:8083".to_string());
-    if let Ok(ws) = ComClient::connect(server_url) {
-        *client = Some(ws);
-    }
+fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     commands
         .spawn()
         .insert_bundle(OrthographicCameraBundle::new_2d())
@@ -65,8 +191,41 @@ fn setup(
     commands.insert_resource(AssetsVisualPlayer {
         sprite_handles: vec![sprite_handle],
     });
-    *want_request_existing = WantToRequestExisting::Yes(Timer::from_seconds(0.5f32, false))
 }
+
+fn reconnect(
+    time: Res<Time>,
+    mut client: ResMut<Option<ComClient>>,
+    mut want_request_existing: ResMut<WantToRequestExisting>,
+    mut reconnect_state: ResMut<ReconnectState>,
+) {
+    if client.is_some() {
+        return;
+    }
+    reconnect_state.timer.tick(time.delta());
+    if !reconnect_state.timer.just_finished() {
+        return;
+    }
+    let current_duration = reconnect_state.timer.duration().as_secs_f32();
+    reconnect_state
+        .timer
+        .set_duration(std::time::Duration::from_secs_f32(current_duration + 2f32));
+    #[cfg(target_arch = "wasm32")]
+    let server_url = option_env!("WAB_SERVER_URL").unwrap_or("ws://127.0.0.1:8083");
+    #[cfg(not(target_arch = "wasm32"))]
+    let server_url =
+        &std::env::var("WAB_SERVER_URL").unwrap_or_else(|_| "ws://127.0.0.1:8083".to_string());
+    reconnect_state.attempt += 1;
+    if let Ok(ws) = ComClient::connect(server_url) {
+        *client = Some(ws);
+        reconnect_state.attempt = 0;
+        reconnect_state
+            .timer
+            .set_duration(std::time::Duration::from_secs_f32(2f32));
+        *want_request_existing = WantToRequestExisting::Yes(Timer::from_seconds(0.5f32, false))
+    }
+}
+
 fn check_request_existing(
     time: Res<Time>,
     mut send: ResMut<MessagesToSend<ClientMessage>>,
@@ -106,6 +265,7 @@ fn receive_messages(
     mut want_request_existing: ResMut<WantToRequestExisting>,
     mut recv: ResMut<MessagesToRead<ServerMessage>>,
     mut moles: Query<(Entity, &Transform, &VisualMole)>,
+    mut local_player: ResMut<LocalPlayer>,
 ) {
     while let Some(message) = recv.pop() {
         match message {
@@ -126,15 +286,25 @@ fn receive_messages(
             ServerMessage::EscapedMole(_) => {
                 todo!("escaped mole");
             }
-            ServerMessage::AllExistingMoles(existing_moles) => {
+            ServerMessage::AllExistingMoles(AllExistingMoles {
+                local_player_id,
+                moles: existing_moles,
+            }) => {
                 for (e, _, _) in moles.iter() {
                     commands.entity(e).despawn();
                 }
+                local_player.id = Some(local_player_id);
                 dbg!("{} existing moles", existing_moles.len());
                 for m in existing_moles {
                     spawn_mole(&mut commands, &sprites, m);
                 }
                 *want_request_existing = WantToRequestExisting::No;
+            }
+            ServerMessage::UpdateScores(update) => {
+                dbg!("update scores {}", update);
+                // TODO: update scores
+                // TODO: receive scores
+                // TODO:
             }
         }
     }
