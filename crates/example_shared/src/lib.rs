@@ -46,7 +46,10 @@ pub struct UpdateScores {
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub enum ServerMessage {
     Spawn(SpawnMole),
-    DeadMole(usize),
+    DeadMole {
+        mole_id: usize,
+        player_killer_id: usize,
+    },
     EscapedMole(usize),
     UpdateScores(UpdateScores),
     AllExistingMoles(AllExistingMoles),

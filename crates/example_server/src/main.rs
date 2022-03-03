@@ -137,7 +137,10 @@ fn receive_messages(
                             .or_insert(0) += 1;
                         dbg!("dead mole: {}", mole_to_die);
                         moles.moles.remove(&mole_to_die);
-                        let message = ServerMessage::DeadMole(mole_to_die);
+                        let message = ServerMessage::DeadMole {
+                            mole_id: mole_to_die,
+                            player_killer_id: from_client_id.into(),
+                        };
                         for send_client_id in com_server.iter() {
                             send.push((*send_client_id, message.clone()));
                         }

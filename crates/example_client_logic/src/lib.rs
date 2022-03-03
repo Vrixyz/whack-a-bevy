@@ -1,6 +1,6 @@
 mod cheatbook;
 
-use bevy::prelude::*;
+use bevy::{app::Events, math::Vec3Swizzles, prelude::*};
 
 use example_shared::{AllExistingMoles, ClientMessage, ServerMessage};
 use litlnet_client_bevy::{ClientPlugin, MessagesToRead, MessagesToSend};
@@ -22,6 +22,18 @@ struct VisualMole {
 struct AssetsVisualPlayer {
     pub sprite_handles: Vec<Handle<Image>>,
 }
+#[derive(Default)]
+struct AssetsExplosions {
+    pub explosion_local: Vec<Handle<Image>>,
+    pub explosion_remote: Vec<Handle<Image>>,
+}
+
+#[derive(Component)]
+struct ExplosionData {
+    timer: Timer,
+    sprite_index: usize,
+    kind: ExplosionKind,
+}
 
 enum WantToRequestExisting {
     No,
@@ -33,6 +45,15 @@ pub struct ReconnectState {
     attempt: usize,
 }
 
+#[derive(PartialEq, Clone)]
+enum ExplosionKind {
+    LocalPlayer,
+    RemotePlayer,
+}
+pub struct SpawnExplosionEvent {
+    position: Vec2,
+    kind: ExplosionKind,
+}
 pub struct LocalPlayer {
     // used to map score (we can have multiple players bringing score to the same rank,
     // it's ok because I won't dev a full authentication system for a jam yet.)
@@ -188,15 +209,23 @@ impl Plugin for GamePlugin {
             timer: Timer::from_seconds(0.01f32, true),
             attempt: 0,
         });
+        app.insert_resource(AssetsExplosions::default());
+        app.add_event::<SpawnExplosionEvent>();
         app.add_startup_system(setup);
         app.add_system(reconnect);
         app.add_system(check_request_existing);
         app.add_system(send_messages);
         app.add_system(receive_messages);
+        app.add_system(spawn_explosions);
+        app.add_system(explosion_lifecycle);
     }
 }
 
-fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+fn setup(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    mut explosions: ResMut<AssetsExplosions>,
+) {
     commands
         .spawn()
         .insert_bundle(OrthographicCameraBundle::new_2d())
@@ -205,6 +234,16 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
     commands.insert_resource(AssetsVisualPlayer {
         sprite_handles: vec![sprite_handle],
     });
+    explosions.explosion_local = vec![
+        assets.load("explosions/local_1.png"),
+        assets.load("explosions/local_2.png"),
+        assets.load("explosions/local_3.png"),
+    ];
+    explosions.explosion_remote = vec![
+        assets.load("explosions/remote_1.png"),
+        assets.load("explosions/remote_2.png"),
+        assets.load("explosions/remote_3.png"),
+    ];
 }
 
 fn reconnect(
@@ -276,6 +315,7 @@ fn send_messages(
 fn receive_messages(
     mut commands: Commands,
     sprites: Res<AssetsVisualPlayer>,
+    mut spawn_explosions_events: EventWriter<SpawnExplosionEvent>,
     mut want_request_existing: ResMut<WantToRequestExisting>,
     mut recv: ResMut<MessagesToRead<ServerMessage>>,
     mut moles: Query<(Entity, &Transform, &VisualMole)>,
@@ -288,10 +328,25 @@ fn receive_messages(
                 dbg!("new mole: {}", &spawn);
                 spawn_mole(&mut commands, &sprites, spawn);
             }
-            ServerMessage::DeadMole(dead_id) => {
+            ServerMessage::DeadMole {
+                mole_id: dead_id,
+                player_killer_id,
+            } => {
                 dbg!("?dead mole: {}", dead_id);
                 for (e, t, v) in moles.iter() {
                     if v.id == dead_id {
+                        if local_player.id.is_some() && local_player.id.unwrap() == player_killer_id
+                        {
+                            spawn_explosions_events.send(SpawnExplosionEvent {
+                                kind: ExplosionKind::LocalPlayer,
+                                position: t.translation.xy(),
+                            });
+                        } else {
+                            spawn_explosions_events.send(SpawnExplosionEvent {
+                                kind: ExplosionKind::RemotePlayer,
+                                position: t.translation.xy(),
+                            });
+                        }
                         dbg!("dead mole: {}", dead_id);
                         commands.entity(e).despawn();
                         break;
@@ -346,4 +401,65 @@ fn spawn_mole(
             ..Default::default()
         })
         .insert(VisualMole { id: spawn.id });
+}
+
+fn spawn_explosions(
+    mut commands: Commands,
+    mut events: EventReader<SpawnExplosionEvent>,
+    sprites: Res<AssetsExplosions>,
+) {
+    for mut event in events.iter() {
+        dbg!("spawn explosion!!!!");
+        commands
+            .spawn()
+            .insert(ExplosionData {
+                sprite_index: 0,
+                timer: Timer::from_seconds(0.12, true),
+                kind: event.kind.clone(),
+            })
+            .insert_bundle(SpriteBundle {
+                texture: if event.kind == ExplosionKind::LocalPlayer {
+                    sprites.explosion_local[0].clone()
+                } else {
+                    sprites.explosion_remote[0].clone()
+                },
+                transform: Transform::from_translation(event.position.extend(10f32)),
+                sprite: Sprite {
+                    custom_size: Some(Vec2::splat(64.0)),
+                    ..Default::default()
+                },
+                ..Default::default()
+            });
+    }
+}
+
+fn explosion_lifecycle(
+    mut commands: Commands,
+    time: Res<Time>,
+    sprites: Res<AssetsExplosions>,
+    mut q_explosions: Query<(Entity, &mut ExplosionData, &mut Handle<Image>)>,
+) {
+    for (e, mut explosion, mut sprite) in q_explosions.iter_mut() {
+        explosion.timer.tick(time.delta());
+        if explosion.timer.just_finished() {
+            explosion.sprite_index += 1;
+            if explosion.kind == ExplosionKind::LocalPlayer
+                && explosion.sprite_index >= sprites.explosion_local.len()
+            {
+                commands.entity(e).despawn();
+                continue;
+            }
+            if explosion.kind == ExplosionKind::RemotePlayer
+                && explosion.sprite_index >= sprites.explosion_remote.len()
+            {
+                commands.entity(e).despawn();
+                continue;
+            }
+            *sprite = if explosion.kind == ExplosionKind::RemotePlayer {
+                sprites.explosion_remote[explosion.sprite_index].clone()
+            } else {
+                sprites.explosion_local[explosion.sprite_index].clone()
+            };
+        }
+    }
 }
