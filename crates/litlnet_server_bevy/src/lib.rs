@@ -4,6 +4,35 @@ use bevy::prelude::*;
 use litlnet_trait::{ClientId, Server};
 use serde::{de::DeserializeOwned, Serialize};
 
+#[derive(Resource)]
+pub struct RComServer<C: Server + Send + Sync + 'static> {
+    pub server: C,
+}
+
+impl<C> Server for RComServer<C>
+where
+    C: Server + Send + Sync + 'static,
+{
+    fn bind(addr: &str) -> Result<Self, std::io::Error>
+    where
+        Self: Sized,
+    {
+        C::bind(addr).map(|res| Self { server: res })
+    }
+
+    fn accept_connections(&mut self) {
+        self.server.accept_connections()
+    }
+
+    fn receive_all<T: DeserializeOwned>(&mut self, read_callback: impl FnMut(ClientId, Vec<T>)) {
+        self.server.receive_all(read_callback)
+    }
+
+    fn send<T: Serialize>(&mut self, client_id: &ClientId, data: &T) {
+        self.server.send(client_id, data)
+    }
+}
+
 pub struct ServerPlugin<C: Server, S: Serialize, R: DeserializeOwned> {
     _phantom_c: Option<PhantomData<C>>,
     _phantom_s: Option<PhantomData<S>>,
@@ -18,6 +47,8 @@ impl<C: Server, S: Serialize, R: DeserializeOwned> Default for ServerPlugin<C, S
         }
     }
 }
+
+#[derive(Resource)]
 pub struct MessagesToSend<S: Serialize> {
     messages: VecDeque<(ClientId, S)>,
 }
@@ -35,6 +66,7 @@ impl<S: Serialize> MessagesToSend<S> {
     }
 }
 
+#[derive(Resource)]
 pub struct MessagesToRead<R: DeserializeOwned> {
     messages: VecDeque<(ClientId, R)>,
 }
@@ -51,31 +83,31 @@ impl<R: DeserializeOwned> MessagesToRead<R> {
     }
 }
 impl<
-        C: Server + Send + Sync + 'static,
+        C: Resource + Server + Send + Sync + 'static,
         S: Serialize + Send + Sync + 'static,
         R: DeserializeOwned + Send + Sync + 'static,
     > Plugin for ServerPlugin<C, S, R>
 {
     fn build(&self, app: &mut App) {
-        let com: Option<C> = None;
-        app.insert_resource(com);
         app.insert_resource(MessagesToRead::<R>::default());
         app.insert_resource(MessagesToSend::<S>::default());
-        app.add_system(accept_connections::<C>);
-        app.add_system(receive_messages::<C, R>);
-        app.add_system(send_messages::<C, S>);
+        app.add_systems(Update, accept_connections::<C>);
+        app.add_systems(Update, receive_messages::<C, R>);
+        app.add_systems(Update, send_messages::<C, S>);
     }
 }
-fn accept_connections<C: Server + Send + Sync + 'static>(mut com_to_read: ResMut<Option<C>>) {
+fn accept_connections<C: Resource + Server + Send + Sync + 'static>(
+    mut com_to_read: Option<ResMut<C>>,
+) {
     if let Some(com_to_read) = com_to_read.as_mut() {
         com_to_read.accept_connections();
     }
 }
 fn receive_messages<
-    C: Server + Send + Sync + 'static,
+    C: Resource + Server + Send + Sync + 'static,
     R: DeserializeOwned + Send + Sync + 'static,
 >(
-    mut com: ResMut<Option<C>>,
+    mut com: Option<ResMut<C>>,
     mut messages_to_read: ResMut<MessagesToRead<R>>,
 ) {
     if let Some(com) = com.as_mut() {
@@ -87,8 +119,11 @@ fn receive_messages<
     }
 }
 
-fn send_messages<C: Server + Send + Sync + 'static, S: Serialize + Send + Sync + 'static>(
-    mut com: ResMut<Option<C>>,
+fn send_messages<
+    C: Resource + Server + Send + Sync + 'static,
+    S: Serialize + Send + Sync + 'static,
+>(
+    mut com: Option<ResMut<C>>,
     mut messages_to_send: ResMut<MessagesToSend<S>>,
 ) {
     if let Some(com) = com.as_mut() {

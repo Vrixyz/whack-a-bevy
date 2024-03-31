@@ -7,4 +7,4 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 example_client_logic = { path = "../example_client_logic" }
-bevy = "*"
+bevy = "0.13"

@@ -20,6 +20,25 @@ impl<C: Communication, S: Serialize, R: DeserializeOwned> Default for ClientPlug
     }
 }
 
+#[derive(Resource)]
+pub struct RComClient<C: Communication + Send + Sync + 'static> {
+    pub com: C,
+}
+
+impl<C> Communication for RComClient<C>
+where
+    C: Communication + Send + Sync + 'static,
+{
+    fn receive<T: DeserializeOwned>(&mut self) -> Result<Option<Vec<T>>, std::io::Error> {
+        self.com.receive()
+    }
+
+    fn send<T: Serialize>(&mut self, message: &T) -> std::io::Result<()> {
+        self.com.send(message)
+    }
+}
+
+#[derive(Resource)]
 pub struct MessagesToSend<S: Serialize> {
     messages: VecDeque<S>,
 }
@@ -37,6 +56,7 @@ impl<S: Serialize> MessagesToSend<S> {
     }
 }
 
+#[derive(Resource)]
 pub struct MessagesToRead<R: DeserializeOwned> {
     messages: VecDeque<R>,
 }
@@ -55,25 +75,22 @@ impl<R: DeserializeOwned> MessagesToRead<R> {
 }
 impl<C, S, R> Plugin for ClientPlugin<C, S, R>
 where
-    C: Communication + Send + Sync + 'static,
+    C: Resource + Communication + Send + Sync + 'static,
     S: Serialize + Send + Sync + 'static,
     R: DeserializeOwned + Send + Sync + 'static,
 {
     fn build(&self, app: &mut App) {
-        let com: Option<C> = None;
-
-        app.insert_resource(com);
         app.insert_resource(MessagesToRead::<R>::default());
         app.insert_resource(MessagesToSend::<S>::default());
-        app.add_system(receive_messages::<C, R>);
-        app.add_system(send_messages::<C, S>);
+        app.add_systems(Update, receive_messages::<C, R>);
+        app.add_systems(Update, send_messages::<C, S>);
     }
 }
 fn receive_messages<
-    C: Communication + Send + Sync + 'static,
+    C: Resource + Communication + Send + Sync + 'static,
     R: DeserializeOwned + Send + Sync + 'static,
 >(
-    mut com: ResMut<Option<C>>,
+    mut com: Option<ResMut<C>>,
     mut messages_to_read: ResMut<MessagesToRead<R>>,
 ) {
     if let Some(com) = com.as_mut() {
@@ -91,8 +108,12 @@ fn receive_messages<
     }
 }
 
-fn send_messages<C: Communication + Send + Sync + 'static, S: Serialize + Send + Sync + 'static>(
-    mut com: ResMut<Option<C>>,
+fn send_messages<
+    C: Resource + Communication + Send + Sync + 'static,
+    S: Serialize + Send + Sync + 'static,
+>(
+    mut commands: Commands,
+    mut com: Option<ResMut<C>>,
     mut messages_to_send: ResMut<MessagesToSend<S>>,
 ) {
     let mut is_fail = false;
@@ -105,6 +126,6 @@ fn send_messages<C: Communication + Send + Sync + 'static, S: Serialize + Send +
         messages_to_send.messages.clear();
     }
     if is_fail {
-        *com = None;
+        commands.remove_resource::<C>();
     }
 }

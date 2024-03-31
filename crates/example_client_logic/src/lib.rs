@@ -1,9 +1,13 @@
 mod cheatbook;
 
-use bevy::{app::Events, math::Vec3Swizzles, prelude::*};
+use bevy::{
+    math::Vec3Swizzles,
+    prelude::*,
+    window::{PrimaryWindow, WindowResolution},
+};
 
 use example_shared::{AllExistingMoles, ClientMessage, ServerMessage};
-use litlnet_client_bevy::{ClientPlugin, MessagesToRead, MessagesToSend};
+use litlnet_client_bevy::{ClientPlugin, MessagesToRead, MessagesToSend, RComClient};
 
 #[cfg(target_arch = "wasm32")]
 type ComClient = litlnet_websocket_web::WebsocketClient;
@@ -19,10 +23,11 @@ struct VisualMole {
     id: usize,
 }
 
+#[derive(Resource)]
 struct AssetsVisualPlayer {
     pub sprite_handles: Vec<Handle<Image>>,
 }
-#[derive(Default)]
+#[derive(Default, Resource)]
 struct AssetsExplosions {
     pub explosion_local: Vec<Handle<Image>>,
     pub explosion_remote: Vec<Handle<Image>>,
@@ -35,11 +40,13 @@ struct ExplosionData {
     kind: ExplosionKind,
 }
 
+#[derive(Resource)]
 enum WantToRequestExisting {
     No,
     Yes(Timer),
 }
 
+#[derive(Resource)]
 pub struct ReconnectState {
     timer: Timer,
     attempt: usize,
@@ -50,10 +57,14 @@ enum ExplosionKind {
     LocalPlayer,
     RemotePlayer,
 }
+
+#[derive(Event)]
 pub struct SpawnExplosionEvent {
     position: Vec2,
     kind: ExplosionKind,
 }
+
+#[derive(Resource)]
 pub struct LocalPlayer {
     // used to map score (we can have multiple players bringing score to the same rank,
     // it's ok because I won't dev a full authentication system for a jam yet.)
@@ -63,22 +74,25 @@ pub struct LocalPlayer {
     id: Option<usize>,
     score: Option<u32>,
 }
+
+#[derive(Resource)]
 pub struct RemotePlayers {
     players: Vec<(String, u32)>,
 }
+
 mod ui {
     use bevy::{prelude::*, reflect::List};
-    use bevy_egui::{EguiContext, EguiPlugin};
+    use bevy_egui::{EguiContext, EguiContexts, EguiPlugin};
     use egui::{Color32, RichText, Vec2};
     use example_shared::ClientMessage;
-    use litlnet_client_bevy::MessagesToSend;
+    use litlnet_client_bevy::{MessagesToSend, RComClient};
 
     use crate::{ComClient, LocalPlayer, ReconnectState, RemotePlayers, VisualMole};
     pub struct GameUI;
 
     impl Plugin for GameUI {
         fn build(&self, app: &mut App) {
-            app.add_plugin(EguiPlugin);
+            app.add_plugins(EguiPlugin);
             app.insert_resource(LocalPlayer {
                 name: "Newbie".to_string(),
                 is_final: false,
@@ -86,14 +100,14 @@ mod ui {
                 score: None,
             });
             app.insert_resource(RemotePlayers { players: vec![] });
-            app.add_system(show_name);
-            app.add_system(display_connection);
+            app.add_systems(Update, show_name);
+            app.add_systems(Update, display_connection);
         }
     }
 
     fn show_name(
         mut send: ResMut<MessagesToSend<ClientMessage>>,
-        mut egui_context: ResMut<EguiContext>,
+        mut contexts: EguiContexts,
         mut local_player: ResMut<LocalPlayer>,
         remote_players: Res<RemotePlayers>,
         moles: Query<Entity, With<VisualMole>>,
@@ -101,7 +115,7 @@ mod ui {
         egui::Window::new("Info")
             .fixed_size(Vec2::new(150f32, 400f32))
             .anchor(egui::Align2::LEFT_TOP, Vec2::default())
-            .show(egui_context.ctx_mut(), |ui| {
+            .show(contexts.ctx_mut(), |ui| {
                 if (local_player.is_final) {
                     ui.label(format!("Nickname: {}", local_player.name));
                 } else {
@@ -141,8 +155,8 @@ mod ui {
             });
     }
     fn display_connection(
-        mut egui_context: ResMut<EguiContext>,
-        client: Res<Option<ComClient>>,
+        mut contexts: EguiContexts,
+        client: Option<Res<RComClient<ComClient>>>,
         reconnect_state: Res<ReconnectState>,
     ) {
         if client.is_some() {
@@ -150,7 +164,7 @@ mod ui {
         }
         egui::Window::new("Connection to server...")
             .anchor(egui::Align2::CENTER_CENTER, Vec2::default())
-            .show(egui_context.ctx_mut(), |ui| {
+            .show(contexts.ctx_mut(), |ui| {
                 ui.label(format!(
                     "retrying in {} seconds",
                     (reconnect_state.timer.duration().as_secs_f32()
@@ -194,30 +208,34 @@ pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(WindowDescriptor {
-            title: "Whack A Bevy!".to_string(),
-            width: 1080.,
-            height: 640.,
-            vsync: true,
-            ..Default::default()
-        });
-        app.add_plugins(DefaultPlugins);
-        app.add_plugin(ClientPlugin::<ComClient, ClientMessage, ServerMessage>::default());
-        app.add_plugin(ui::GameUI);
+        app.add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Whack A Bevy!".to_string(),
+                resolution: WindowResolution::new(1080., 640.),
+                ..Default::default()
+            }),
+            ..default()
+        }));
+        app.add_plugins(ClientPlugin::<
+            RComClient<ComClient>,
+            ClientMessage,
+            ServerMessage,
+        >::default());
+        app.add_plugins(ui::GameUI);
         app.insert_resource(WantToRequestExisting::No);
         app.insert_resource(ReconnectState {
-            timer: Timer::from_seconds(0.01f32, true),
+            timer: Timer::from_seconds(0.01f32, TimerMode::Repeating),
             attempt: 0,
         });
         app.insert_resource(AssetsExplosions::default());
         app.add_event::<SpawnExplosionEvent>();
-        app.add_startup_system(setup);
-        app.add_system(reconnect);
-        app.add_system(check_request_existing);
-        app.add_system(send_messages);
-        app.add_system(receive_messages);
-        app.add_system(spawn_explosions);
-        app.add_system(explosion_lifecycle);
+        app.add_systems(Startup, setup);
+        app.add_systems(Update, reconnect);
+        app.add_systems(Update, check_request_existing);
+        app.add_systems(Update, send_messages);
+        app.add_systems(Update, receive_messages);
+        app.add_systems(Update, spawn_explosions);
+        app.add_systems(Update, explosion_lifecycle);
     }
 }
 
@@ -226,10 +244,7 @@ fn setup(
     assets: Res<AssetServer>,
     mut explosions: ResMut<AssetsExplosions>,
 ) {
-    commands
-        .spawn()
-        .insert_bundle(OrthographicCameraBundle::new_2d())
-        .insert(MainCamera);
+    commands.spawn(Camera2dBundle::default()).insert(MainCamera);
     let sprite_handle = assets.load("players/icon_bevy.png");
     commands.insert_resource(AssetsVisualPlayer {
         sprite_handles: vec![sprite_handle],
@@ -248,7 +263,8 @@ fn setup(
 
 fn reconnect(
     time: Res<Time>,
-    mut client: ResMut<Option<ComClient>>,
+    mut commands: Commands,
+    client: Option<ResMut<RComClient<ComClient>>>,
     mut want_request_existing: ResMut<WantToRequestExisting>,
     mut reconnect_state: ResMut<ReconnectState>,
 ) {
@@ -264,18 +280,19 @@ fn reconnect(
         .timer
         .set_duration(std::time::Duration::from_secs_f32(current_duration + 2f32));
     #[cfg(target_arch = "wasm32")]
-    let server_url = option_env!("WAB_SERVER_URL").unwrap_or("ws://127.0.0.1:8083");
+    let server_url = option_env!("WEB_SERVER_URL").unwrap_or("ws://127.0.0.1:8083");
     #[cfg(not(target_arch = "wasm32"))]
     let server_url =
-        &std::env::var("WAB_SERVER_URL").unwrap_or_else(|_| "ws://127.0.0.1:8083".to_string());
+        &std::env::var("WEB_SERVER_URL").unwrap_or_else(|_| "ws://127.0.0.1:8083".to_string());
     reconnect_state.attempt += 1;
     if let Ok(ws) = ComClient::connect(server_url) {
-        *client = Some(ws);
+        commands.insert_resource(RComClient { com: ws });
         reconnect_state.attempt = 0;
         reconnect_state
             .timer
             .set_duration(std::time::Duration::from_secs_f32(2f32));
-        *want_request_existing = WantToRequestExisting::Yes(Timer::from_seconds(0.5f32, false))
+        *want_request_existing =
+            WantToRequestExisting::Yes(Timer::from_seconds(0.5f32, TimerMode::Once))
     }
 }
 
@@ -299,12 +316,20 @@ fn check_request_existing(
 
 fn send_messages(
     mut send: ResMut<MessagesToSend<ClientMessage>>,
-    buttons: Res<Input<MouseButton>>,
-    wnds: Res<Windows>,
-    q_camera: Query<&Transform, With<MainCamera>>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    // query to get the window (so we can read the current cursor position)
+    q_window: Query<&Window, With<PrimaryWindow>>,
+    // query to get camera transform
+    q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
 ) {
     if buttons.just_pressed(MouseButton::Left) {
-        if let Ok(world_position) = cheatbook::cursor_to_world(&wnds, q_camera.single()) {
+        // get the camera info and transform
+        // assuming there is exactly one main camera entity, so Query::single() is OK
+        let (camera, camera_transform) = q_camera.single();
+
+        // There is only one primary window, so we can similarly get it from the query:
+        let window = q_window.single();
+        if let Some(world_position) = cheatbook::cursor_to_world(window, q_camera.single()) {
             send.push(ClientMessage::HitPosition(Vec2::new(
                 world_position.x,
                 world_position.y,
@@ -390,8 +415,7 @@ fn spawn_mole(
     spawn: example_shared::SpawnMole,
 ) {
     commands
-        .spawn()
-        .insert_bundle(SpriteBundle {
+        .spawn(SpriteBundle {
             texture: sprites.sprite_handles[0].clone(),
             transform: Transform::from_translation(spawn.def.position.extend(0f32)),
             sprite: Sprite {
@@ -408,16 +432,15 @@ fn spawn_explosions(
     mut events: EventReader<SpawnExplosionEvent>,
     sprites: Res<AssetsExplosions>,
 ) {
-    for mut event in events.iter() {
+    for mut event in events.read() {
         dbg!("spawn explosion!!!!");
         commands
-            .spawn()
-            .insert(ExplosionData {
+            .spawn(ExplosionData {
                 sprite_index: 0,
-                timer: Timer::from_seconds(0.12, true),
+                timer: Timer::from_seconds(0.12, TimerMode::Repeating),
                 kind: event.kind.clone(),
             })
-            .insert_bundle(SpriteBundle {
+            .insert(SpriteBundle {
                 texture: if event.kind == ExplosionKind::LocalPlayer {
                     sprites.explosion_local[0].clone()
                 } else {

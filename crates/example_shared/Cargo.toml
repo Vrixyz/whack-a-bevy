@@ -11,4 +11,4 @@ name = "example_shared"
 [dependencies]
 serde = { version = "*", features = ["derive"] }
 rmp-serde = "*"
-bevy = { version = "*", default-features = false }
+bevy = { version = "0.13", default-features = false }

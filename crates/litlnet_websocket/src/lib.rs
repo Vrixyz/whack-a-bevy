@@ -11,20 +11,20 @@ trait LitlWebsocket {
 
 impl LitlWebsocket for WebSocket<MaybeTlsStream<TcpStream>> {
     fn write_all(&mut self, buf: Vec<u8>) -> Result<(), tungstenite::Error> {
-        self.write_message(Message::Binary(buf))
+        self.send(Message::Binary(buf))
     }
 
     fn read(&mut self) -> Result<Message, tungstenite::Error> {
-        self.read_message()
+        self.read()
     }
 }
 impl LitlWebsocket for WebSocket<TcpStream> {
     fn write_all(&mut self, buf: Vec<u8>) -> Result<(), tungstenite::Error> {
-        self.write_message(Message::Binary(buf))
+        self.send(Message::Binary(buf))
     }
 
     fn read(&mut self) -> Result<Message, tungstenite::Error> {
-        self.read_message()
+        self.read()
     }
 }
 
@@ -52,11 +52,13 @@ impl WebsocketClient {
         })
     }
     pub fn from_stream(stream: std::net::TcpStream) -> Result<WebsocketClient, std::io::Error> {
-        stream.set_nonblocking(true)?;
         match tungstenite::accept(stream) {
-            Ok(websocket) => Ok(Self {
-                websocket: Box::new(websocket),
-            }),
+            Ok(mut websocket) => {
+                websocket.get_mut().set_nonblocking(true)?;
+                Ok(Self {
+                    websocket: Box::new(websocket),
+                })
+            }
             Err(e) => Err(std::io::Error::new(
                 std::io::ErrorKind::ConnectionAborted,
                 dbg!(e),

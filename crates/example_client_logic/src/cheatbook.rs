@@ -1,29 +1,28 @@
-use bevy::{math::Vec4Swizzles, prelude::*};
+use bevy::{prelude::*, window::PrimaryWindow};
 
-pub(crate) fn cursor_to_world(
-    // need to get window dimensions
-    wnds: &Res<Windows>,
+/// We will store the world position of the mouse cursor here.
+#[derive(Resource, Default)]
+struct MyWorldCoords(Vec2);
+
+/// Used to help identify our main camera
+#[derive(Component)]
+struct MainCamera;
+
+fn setup(mut commands: Commands) {
+    // Make sure to add the marker component when you set up your camera
+    commands.spawn((Camera2dBundle::default(), MainCamera));
+}
+
+pub fn cursor_to_world(
+    // query to get the window (so we can read the current cursor position)
+    window: &Window,
     // query to get camera transform
-    q_camera: &Transform,
-) -> Result<Vec3, ()> {
-    // get the primary window
-    let wnd = wnds.get_primary().unwrap();
-
-    // check if the cursor is in the primary window
-    if let Some(pos) = wnd.cursor_position() {
-        // get the size of the window
-        let size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
-
-        // the default orthographic projection is in pixels from the center;
-        // just undo the translation
-        let p = pos - size / 2.0;
-
-        // assuming there is exactly one main camera entity, so this is OK
-        let camera_transform = q_camera;
-
-        // apply the camera transform
-        let pos_wld = camera_transform.compute_matrix() * p.extend(0.0).extend(1.0);
-        return Ok(pos_wld.xyz());
-    }
-    Err(())
+    (camera, camera_transform): (&Camera, &GlobalTransform),
+) -> Option<Vec2> {
+    // check if the cursor is inside the window and get its position
+    // then, ask bevy to convert into world coordinates, and truncate to discard Z
+    window
+        .cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+        .map(|ray| ray.origin.truncate())
 }

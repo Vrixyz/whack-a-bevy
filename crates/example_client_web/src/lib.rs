@@ -15,5 +15,5 @@ extern "C" {
 
 #[wasm_bindgen(start)]
 pub fn start() {
-    App::new().add_plugin(GamePlugin).run();
+    App::new().add_plugins(GamePlugin).run();
 }

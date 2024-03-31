@@ -22,3 +22,17 @@ mv crates/example_client* .
 CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-unknown-linux-gnu-gcc cargo build --bin example_server --target x86_64-unknown-linux-gnu 
 mv example_client* crates
 '''
+
+# For docker build
+[tasks.db]
+workspace = false
+script = '''
+docker build -t wab .
+'''
+
+# For docker run
+[tasks.dr]
+workspace = false
+script = '''
+docker run -it -p 8083:8083 wab
+'''

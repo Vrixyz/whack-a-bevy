@@ -119,7 +119,7 @@ fn start_websocket(remote_addr: &str) -> Result<WebSocket, JsValue> {
             let array = js_sys::Uint8Array::new(&abuf);
             match global_recv_packets().lock() {
                 Ok(mut recv) => recv.push(array.to_vec()),
-                Err(e) => todo!("cannot lock recv global ?"),
+                Err(_e) => todo!("cannot lock recv global ?"),
             }
         } else {
             dbg!("message event, received Unknown: {:?}", e.data());
@@ -136,7 +136,7 @@ fn start_websocket(remote_addr: &str) -> Result<WebSocket, JsValue> {
     ws.set_onerror(Some(onerror_callback.as_ref().unchecked_ref()));
     onerror_callback.forget();
 
-    let cloned_ws = ws.clone();
+    let _cloned_ws = ws.clone();
     let onopen_callback = Closure::wrap(Box::new(move |_| {
         // ?
     }) as Box<dyn FnMut(JsValue)>);

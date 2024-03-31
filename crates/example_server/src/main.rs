@@ -1,7 +1,7 @@
 use bevy::{prelude::*, utils::HashMap};
 use example_shared::{AllExistingMoles, PlayerRank, UpdateScores};
 use example_shared::{ClientMessage, MoleDef, MoleKind, ServerMessage, SpawnMole};
-use litlnet_server_bevy::{MessagesToRead, MessagesToSend, ServerPlugin};
+use litlnet_server_bevy::{MessagesToRead, MessagesToSend, RComServer, ServerPlugin};
 use litlnet_trait::ClientId;
 use litlnet_trait::Server;
 use litlnet_websocket_server::ComServer;
@@ -12,44 +12,51 @@ use rand_chacha::ChaCha20Rng;
 use std::env;
 
 fn main() {
-    App::new().add_plugin(GamePlugin).run();
+    App::new().add_plugins(GamePlugin).run();
 }
 pub struct GamePlugin;
 
+#[derive(Resource)]
 pub struct MoleIds {
     pub next_id: usize,
 }
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct PlayersRanking {
     pub ranks: HashMap<String, usize>,
 }
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct PlayersNames {
     pub names: HashMap<ClientId, String>,
 }
 
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct Moles {
     pub moles: HashMap<usize, MoleDef>,
 }
 
+#[derive(Resource)]
 pub struct SpawnTimer {
     timer: Timer,
 }
 
+#[derive(Resource)]
 pub struct ScoreUpdateTimer {
     timer: Timer,
 }
+
+#[derive(Resource)]
 pub struct SpawnDef {
     spawn_area_radius: Vec2,
     offset: Vec2,
 }
 
+#[derive(Resource)]
 pub struct RandomDeterministic {
     pub random: ChaCha20Rng,
     pub seed: u64,
 }
 
+#[derive(Resource)]
 pub struct ConnectionTarget {
     url: String,
 }
@@ -65,7 +72,11 @@ impl Default for RandomDeterministic {
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(ServerPlugin::<ComServer, ServerMessage, ClientMessage>::default());
+        app.add_plugins(ServerPlugin::<
+            RComServer<ComServer>,
+            ServerMessage,
+            ClientMessage,
+        >::default());
         app.add_plugins(MinimalPlugins);
         app.insert_resource(RandomDeterministic::default());
         app.insert_resource(MoleIds { next_id: 0 });
@@ -73,10 +84,10 @@ impl Plugin for GamePlugin {
         app.insert_resource(PlayersNames::default());
         app.insert_resource(PlayersRanking::default());
         app.insert_resource(SpawnTimer {
-            timer: Timer::from_seconds(2.5f32, true),
+            timer: Timer::from_seconds(2.5f32, TimerMode::Repeating),
         });
         app.insert_resource(ScoreUpdateTimer {
-            timer: Timer::from_seconds(2f32, true),
+            timer: Timer::from_seconds(2f32, TimerMode::Repeating),
         });
         app.insert_resource(SpawnDef {
             // resolution of client ("optimized" for itch.io embed rendering)
@@ -85,26 +96,30 @@ impl Plugin for GamePlugin {
         });
         let port = env::var("PORT").unwrap_or("8083".to_string());
         app.insert_resource(ConnectionTarget {
-            url: format!("0.0.0.0:{}", port),
+            url: dbg!(format!("0.0.0.0:{}", port)),
         });
-        app.add_system(receive_messages);
-        app.add_system(spawn_moles);
-        app.add_system(send_scores);
-        app.add_system(reconnect);
+        app.add_systems(Update, receive_messages);
+        app.add_systems(Update, spawn_moles);
+        app.add_systems(Update, send_scores);
+        app.add_systems(Update, reconnect);
     }
 }
 
-fn reconnect(connection: Res<ConnectionTarget>, mut com: ResMut<Option<ComServer>>) {
+fn reconnect(
+    mut commands: Commands,
+    connection: Res<ConnectionTarget>,
+    com: Option<ResMut<RComServer<ComServer>>>,
+) {
     if com.is_none() {
         dbg!("Reconnection");
-        if let Ok(new_com) = ComServer::bind(&connection.url) {
-            *com = Some(new_com);
+        if let Ok(new_com) = RComServer::<ComServer>::bind(&connection.url) {
+            commands.insert_resource(new_com);
         }
     }
 }
 
 fn receive_messages(
-    com_server: Res<Option<ComServer>>,
+    com_server: Option<Res<RComServer<ComServer>>>,
     mut player_names: ResMut<PlayersNames>,
     mut ranking: ResMut<PlayersRanking>,
     mut recv: ResMut<MessagesToRead<ClientMessage>>,
@@ -141,7 +156,7 @@ fn receive_messages(
                             mole_id: mole_to_die,
                             player_killer_id: from_client_id.into(),
                         };
-                        for send_client_id in com_server.iter() {
+                        for send_client_id in com_server.server.iter() {
                             send.push((*send_client_id, message.clone()));
                         }
                     }
@@ -177,7 +192,7 @@ fn spawn_moles(
     time: Res<Time>,
     mut timer: ResMut<SpawnTimer>,
     spawn_def: Res<SpawnDef>,
-    com_server: Res<Option<ComServer>>,
+    com_server: Option<Res<RComServer<ComServer>>>,
     mut mole_ids: ResMut<MoleIds>,
     mut moles: ResMut<Moles>,
     mut send: ResMut<MessagesToSend<ServerMessage>>,
@@ -205,7 +220,7 @@ fn spawn_moles(
         });
         dbg!("new mole");
         mole_ids.next_id += 1;
-        for send_client_id in com_server.iter() {
+        for send_client_id in com_server.server.iter() {
             send.push((*send_client_id, message.clone()));
         }
     }
@@ -214,9 +229,9 @@ fn spawn_moles(
 fn send_scores(
     time: Res<Time>,
     mut score_to_send_timer: ResMut<ScoreUpdateTimer>,
-    com_server: Res<Option<ComServer>>,
+    com_server: Option<Res<RComServer<ComServer>>>,
     mut send: ResMut<MessagesToSend<ServerMessage>>,
-    mut ranking: ResMut<PlayersRanking>,
+    ranking: ResMut<PlayersRanking>,
 ) {
     if let Some(com_server) = com_server.as_ref() {
         score_to_send_timer.timer.tick(time.delta());
@@ -233,7 +248,7 @@ fn send_scores(
                 })
                 .collect(),
         });
-        for send_client_id in com_server.iter() {
+        for send_client_id in com_server.server.iter() {
             send.push((*send_client_id, ranking.clone()));
         }
     }
