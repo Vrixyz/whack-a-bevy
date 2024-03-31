@@ -11,5 +11,7 @@
   ],
   "module": "example_client_web.js",
   "types": "example_client_web.d.ts",
-  "sideEffects": false
+  "sideEffects": [
+    "./snippets/*"
+  ]
 }
