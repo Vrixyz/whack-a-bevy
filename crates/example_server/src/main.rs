@@ -84,7 +84,7 @@ impl Plugin for GamePlugin {
         app.insert_resource(PlayersNames::default());
         app.insert_resource(PlayersRanking::default());
         app.insert_resource(SpawnTimer {
-            timer: Timer::from_seconds(2.5f32, TimerMode::Repeating),
+            timer: Timer::from_seconds(0.5f32, TimerMode::Repeating),
         });
         app.insert_resource(ScoreUpdateTimer {
             timer: Timer::from_seconds(2f32, TimerMode::Repeating),
@@ -202,6 +202,9 @@ fn spawn_moles(
         return;
     }
     if let Some(com_server) = com_server.as_ref() {
+        if 50 < moles.moles.len() {
+            return;
+        }
         let def = MoleDef {
             kind: MoleKind::Duration(2f32),
             position: Vec2::new(
