@@ -34,7 +34,7 @@ jobs:
           override: true
       - uses: jetli/wasm-pack-action@v0.3.0
       - run: cargo install --force cargo-make
-      - run: WEB_SERVER_URL=ws://whack-a-bevy-withered-butterfly-6697.fly.dev cargo make example-web && rm ./crates/example_client_web/public/pkg/.gitignore
+      - run: WEB_SERVER_URL=wss://whack-a-bevy.fly.dev cargo make example-web && rm ./crates/example_client_web/public/pkg/.gitignore
       - uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

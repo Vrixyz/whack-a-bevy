@@ -4,7 +4,7 @@ CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = "true"
 [tasks.example-web]
 workspace = false
 script = '''
-cd crates/example_client_web && WEB_SERVER_URL=ws://whack-a-bevy.fly.dev wasm-pack build --target web --out-dir public/pkg
+cd crates/example_client_web && WEB_SERVER_URL=wss://whack-a-bevy.fly.dev wasm-pack build --target web --out-dir public/pkg
 '''
 
 [tasks.w]
